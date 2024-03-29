@@ -90,6 +90,8 @@ class DataHandler:
             #self.etf_data[etf].rename(columns={'index': 'Date'}, inplace=True)
             #self.etf_data[etf]['Date'] = self.etf_data[etf]['Date'].dt.tz_localize(None)
             self.etf_data[etf]["inc_close"] = self.etf_data[etf]["Close"].pct_change(30)
+            #self.etf_data[etf]["close_30"] = self.etf_data[etf]["inc_close"]
+
 
             # Obtener los datos de precios para cada ETF con yfinance
 
