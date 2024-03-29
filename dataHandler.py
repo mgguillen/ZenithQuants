@@ -4,6 +4,7 @@ from datetime import datetime
 import requests
 import nolds
 from scipy.stats import skew, kurtosis
+from sklearn.preprocessing import StandardScaler
 import numpy as np
 import pandas as pd
 import warnings
@@ -20,7 +21,7 @@ from scipy.stats import skew, kurtosis
 class DataHandler:
     def __init__(self, p_etfs=None, p_metric_econom=None, p_inicio=None, p_fin= None):
         if p_etfs is None:
-            self.p_etfs = ['XLE', 'XLB', 'XLI', 'XLK', 'XLF', 'XLP', 'XLY', 'XLV', 'XLU', 'XLRE', 'XLC', 'SPY']
+            self.p_etfs = ["XLE", "XLB", "XLI", "XLK", "XLF", "XLP", "XLY", "XLV", "XLU", "IYR", "VOX", "SPY"]
         else:
             self.p_etfs = p_etfs
         if p_metric_econom is None:
@@ -81,31 +82,38 @@ class DataHandler:
         for etf in self.p_etfs:
             ticker = yf.Ticker(etf)
             self.etf_data[etf] = ticker.history(start=self.p_inicio, end=self.p_fin)
+            self.etf_data[etf]["ETF"] = etf
             self.etf_data[etf].reset_index(inplace=True)
             self.etf_data[etf]['Date'] = self.etf_data[etf]['Date'].dt.tz_localize(None)
             self.etf_data[etf].reset_index(inplace=True)
             self.etf_data[etf] = self.etf_data[etf].drop('index', axis=1)
             #self.etf_data[etf].rename(columns={'index': 'Date'}, inplace=True)
             #self.etf_data[etf]['Date'] = self.etf_data[etf]['Date'].dt.tz_localize(None)
+            self.etf_data[etf]["inc_close"] = self.etf_data[etf]["Close"].pct_change(30)
 
             # Obtener los datos de precios para cada ETF con yfinance
-            self.etf_data[etf]["ETF"]=etf
-            self.etf_data[etf]['RSI'] = self.etf_data[etf].ta.rsi(close='close', length=14)
+
+            #self.etf_data[etf]['RSI'] = self.etf_data[etf].ta.rsi(self.etf_data[etf]["Close"], length=14)
+            #self.etf_data[etf]['RSI'] = ta.rsi(self.etf_data[etf]["Close"], length=14)
             # df['RSI'] = ta.momentum.RSIIndicator(df['close']).rsi()
             # EMA (Media Móvil Exponencial)
-            self.etf_data[etf]['EMA'] = self.etf_data[etf].ta.ema(close='close')
+            #print(self.etf_data[etf]['RSI'])
+            self.etf_data[etf]['RSI'] = self.etf_data[etf].ta.rsi(close='Close', length=14)
+            #print(self.etf_data[etf].columns)
+            #print(self.etf_data[etf]['RSI'])
+            self.etf_data[etf]['EMA'] = self.etf_data[etf].ta.ema(close='Close')
 
             # SMA (Media Móvil Simple)
-            self.etf_data[etf]['SMA'] = self.etf_data[etf].ta.sma(close='close')
+            self.etf_data[etf]['SMA'] = self.etf_data[etf].ta.sma(close='Close')
 
             # TEMA (Triple Media Móvil Exponencial)
-            self.etf_data[etf]['TEMA'] = self.etf_data[etf].ta.tema(close='close')
+            self.etf_data[etf]['TEMA'] = self.etf_data[etf].ta.tema(close='Close')
 
             # CCI (Índice de Canal de Mercancía)
-            self.etf_data[etf]['CCI'] = self.etf_data[etf].ta.cci(high='high', low='low', close='close')
+            self.etf_data[etf]['CCI'] = self.etf_data[etf].ta.cci(high='High', low='Low', close='Close')
 
             # CMO (Oscilador de Momento Chande)
-            self.etf_data[etf]['CMO'] = self.etf_data[etf].ta.cmo(close='close')
+            self.etf_data[etf]['CMO'] = self.etf_data[etf].ta.cmo(close='Close')
 
             # MACD
             #df['MACD_signal'] = ta.macd(df['Close'])['MACDs_12_26_9']
@@ -115,16 +123,16 @@ class DataHandler:
             self.etf_data[etf]['PPO_signal'] = ta.ppo(self.etf_data[etf]['Close'])['PPOs_12_26_9']
 
             # ROC (Tasa de Cambio)
-            self.etf_data[etf]['ROC'] = self.etf_data[etf].ta.roc(close='close')
+            self.etf_data[etf]['ROC'] = self.etf_data[etf].ta.roc(close='Close')
 
             # CMF (Flujo Monetario de Chaikin)
-            self.etf_data[etf]['CMF'] = self.etf_data[etf].ta.cmf(high='high', low='low', close='close', volume='volume')
+            self.etf_data[etf]['CMF'] = self.etf_data[etf].ta.cmf(high='High', low='Low', close='Close', volume='volume')
 
             # ADX (Índice Direccional Promedio)
-            self.etf_data[etf]['ADX'] = self.etf_data[etf].ta.adx(high='high', low='low', close='close')['ADX_14']
+            self.etf_data[etf]['ADX'] = self.etf_data[etf].ta.adx(high='High', low='Low', close='Close')['ADX_14']
 
             # HMA (Media Móvil de Hull)
-            self.etf_data[etf]['HMA'] = self.etf_data[etf].ta.hma(close='close', length=9)
+            self.etf_data[etf]['HMA'] = self.etf_data[etf].ta.hma(close='Close', length=9)
 
             # df['HML'] = df.ta.hma(close='close', length=9)
 
@@ -141,7 +149,6 @@ class DataHandler:
             #self.etf_data[etf]=self.etf_data[etf]
             #print(self.etf_data[etf].columns)
             #print(df.columns)
-
             lista_df.append(pd.merge(self.etf_data[etf], df, on='Date'))
 
             #print(self.etf_data.head())
@@ -149,6 +156,24 @@ class DataHandler:
         df_metricas = pd.concat(lista_df, ignore_index=True)
 
         return df_metricas
+
+    def clean_data(self, data = None):
+        if data is None:
+            print("Por favor introduzca un Data Frame")
+        else:
+            data = data.dropna()
+        return data
+
+    def preprocess_data(self,data = None):
+        if data is None:
+            print("Por favor introduzca un Data Frame")
+        else:
+            columnas_numericas = data.select_dtypes(include=['number']).columns
+        sc = StandardScaler()
+        data[columnas_numericas] = sc.fit_transform(data[columnas_numericas])
+        return data
+
+
 
 
 
