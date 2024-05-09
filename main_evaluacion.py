@@ -33,7 +33,7 @@ nyse_calendar = mcal.get_calendar('NYSE')
 #'2024-04-10'
 # Obtener las sesiones de trading en el rango deseado
 # Lo realizamos con un índice doble, primer dia activo de cada mes, ETF
-trading_days = nyse_calendar.schedule(start_date='2020-01-02', end_date='2021-01-05')
+trading_days = nyse_calendar.schedule(start_date='2020-01-02', end_date='2021-01-04')
 trading_days.index = trading_days.index.tz_localize(None)
 #active_days = trading_days.index
 trading_days_series = trading_days.index.to_series()
@@ -57,8 +57,8 @@ current_month = None
 
 for today in first_business_days:
     print("today: ", today)
-    dt = DataHandler(start_date='2009-01-01', start_back=today.strftime('%Y-%m-%d'), freq=freq, save=False,technical=False)
-    datos = dt.load_data()  # ['2010-01-01':]
+    dt = DataHandler(start_date='2009-01-01', start_back=today.strftime('%Y-%m-%d'), freq=freq)
+    datos = dt.load_data()
     end_date_fred_str = dt.end_date_fred_str
     start_date = dt.start_date
     # Cargamos el Dataset con los datos necesarios para nuestra estrategia
@@ -72,17 +72,18 @@ for today in first_business_days:
     # Una vez que tenemos los datos y como voy a calcular los procesos de seleccion de atributos, seleccion
     # de hiperparametros y prediccion de forma independiente para cada ETF, preparo la función que voy a usar
     # en el cálculo paralelizado
-    for method in ['shap', 'causal', 'selectkbest']:
+    for method in ['shap']:#, 'causal', 'selectkbest']:
+    #for method in ['causal']:
         def procesar_etf(etf):
             # seleccionamos datos por ETF
-            data_etf = datos[datos["etf"] == etf]
+            data_etf = datos[datos["etf"] == etf].copy()
             # print("etf: ######", etf, '\n')
             #print("data_etf",data_etf.tail())
 
             # Añadimos atributos alpha_factors
             alpha_factors = AlphaFactors(data_etf,end_date_fred_str,start_date)
             #alpha = data_etf
-            alpha = alpha_factors.calculate_all()
+            alpha = alpha_factors.calculate_all().copy()
             #print("alpha",alpha.tail())
 
             # Seleccionamos los mejores atributos
@@ -106,11 +107,11 @@ for today in first_business_days:
             atributos = caracteristicas[['top_features']].iloc[0][0]
             #print("atributos",type(atributos),atributos)
             ##atributos = caracteristicas.iloc[:10][['media']].index.tolist()
-            data_model = alpha[["date"] + atributos + ["close"]].reset_index(drop=True)
+            data_model = alpha[["date"] + atributos + ["close"]].reset_index(drop=True).copy()
             # print(f"antes modelos {etf} = ", data_model[["date","close"]].tail())
             #print('data_model:',data_model)
             # Calculamos los mejores hiperparametros y realizamos la prediccion
-            b = ModelBuilder(data_model, model='LGBMR', split=True)
+            b = ModelBuilder(data_model, model='XGBR', split=True)
             # rend = b.predict_rend()[0]
             rmse = b.run()
             # print("rend", type(rend), rend)
@@ -158,16 +159,14 @@ for today in first_business_days:
 
 
 
-evaluations.to_csv('evaluations.csv', index=False)
+evaluations.to_csv('6-evaluations.csv', index=False)
 
 evaluations_est = evaluations.groupby(['ETF', 'Method']).RMSE.mean().unstack()
-print(evaluations_est)
 evaluations_est2 = evaluations.groupby(['Method']).RMSE.mean()
-print(evaluations_est2)
-import seaborn as sns
+
 
 # Cargar una paleta de seaborn
-colors = sns.color_palette("magma", n_colors=3)  # Cambia "viridis" por otra paleta como "magma", "coolwarm", etc.
+colors = sns.color_palette("magma", n_colors=3)
 
 # Graficar con esta paleta
 ax = evaluations_est.plot(kind='bar', figsize=(14, 7), width=0.8, color=colors)
@@ -182,7 +181,7 @@ plt.show()
 ax = evaluations_est2.plot(kind='bar', figsize=(14, 7), width=0.8, color=colors)
 plt.title('Media de RMSE por Método')
 plt.ylabel('Media RMSE')
-plt.xlabel('ETF')
+plt.xlabel('Metodos')
 plt.xticks(rotation=45)
 plt.legend(title='Método')
 plt.tight_layout()
@@ -190,6 +189,35 @@ plt.show()
 #bv = VectorizedBacktester(predictions,  initial_capital=100000)
 #bv.load_price_data(predictions)
 #bv.backtest_strategy()
+
+evaluations_est = evaluations_est.reset_index()
+evaluations_est.to_csv('6-evaluations_est.csv', index=False)
+print(evaluations_est)
+
+
+evaluations_est2 = evaluations_est2.reset_index()
+evaluations_est2.to_csv('6-evaluations_est2.csv', index=False)
+print(evaluations_est2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

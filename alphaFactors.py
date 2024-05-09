@@ -30,6 +30,7 @@ class AlphaFactors:
         """
 
         self.data = data
+        self.data['close_or'] = self.data['close']
         self.data['close'] = np.log(self.data['close'] / self.data['close'].shift(1))
         self.API_KEY_FRED = 'd6d360dc757c1441a1a73cf568e60e1c'
         self.end_date_fred_str = end_date_fred_str
@@ -188,17 +189,45 @@ class AlphaFactors:
                 self.data = pd.merge_asof(self.data.sort_values('date'), data_serie.sort_values('date'), on='date',
                                      direction="backward")
 
+    def add_mean_reversion_score(self, window=1):
+        mean = self.data['close'].rolling(window).mean()
+        std = self.data['close'].rolling(window).std()
+        self.data[f'mean_reversion_score_{window}m'] = (self.data['close'] - mean) / std
+
+    def add_price_oscillator(self, short_window=1, long_window=2):
+        short_ma = self.data['close'].rolling(window=short_window, min_periods=1).mean()
+        long_ma = self.data['close'].rolling(window=long_window, min_periods=1).mean()
+        self.data['price_oscillator'] = short_ma - long_ma
+
+    def add_on_balance_volume(self):
+        self.data['obv'] = (np.sign(self.data['close_or'].diff()) * self.data['volume']).fillna(0).cumsum()
+
+    def add_accumulation_distribution(self):
+        clv = ((self.data['close_or'] - self.data['low']) - (self.data['high'] - self.data['close_or'])) / (
+                    self.data['high'] - self.data['low'])
+        self.data['adl'] = (clv * self.data['volume']).cumsum()
+
+    def add_commodity_channel_index(self, window=1):
+        tp = (self.data['high'] + self.data['low'] + self.data['close_or']) / 3
+        ma = tp.rolling(window).mean()
+        md = tp.rolling(window).apply(lambda x: np.mean(np.abs(x - x.mean())))
+        self.data['cci'] = (tp - ma) / (0.015 * md)
 
     def calculate_all(self):
         """
         Calculamos todos los factores alfa definidos y los añadimos al DataFrame.
         """
-
-        self.add_historical_volatility()
+        #self.add_historical_volatility()
         self.add_skewness_kurtosis()
         self.add_momentum_indicators()
         self.add_bollinger_bands()
         self.add_fetch_fred()
         self.add_time()
+        self.add_mean_reversion_score()
+        self.add_price_oscillator()
+        self.add_on_balance_volume()
+        self.add_accumulation_distribution()
+        self.add_commodity_channel_index()
+        #print("Alpha factor", self.data.tail())
         return self.data
 

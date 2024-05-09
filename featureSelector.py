@@ -25,10 +25,12 @@ class FeatureSelector:
         #print(type(self.data))
         self.data = self.data.fillna(0)
         self.X = self.data.drop(['date', 'etf', 'close'], axis=1).shift(1)
+        self.X = self.X.iloc[1:]
         self.y = self.data['close']
+        self.y = self.y.iloc[1:]
         self.etf = self.data['etf'].unique()
 
-    def calculate_feature_importance(self, method='causal', n_features=10):
+    def calculate_feature_importance(self, method='causal', n_features=15):
         """
         Calculamos la importancia de las características utilizando alguno de los métodos.
         :param method: Método para calcular la importancia ('shap', 'causal', 'selectkbest').
@@ -89,6 +91,8 @@ class FeatureSelector:
         :param n_features: Número de características más importantes a seleccionar.
         :return: DataFrame con las características más importantes según SelectKBest.
         """
+        #print(self.X.head())
+        #print(self.X.tail())
         column_names = self.X.columns  # Guarda los nombres de las columnas antes de la imputación
         imputer = IterativeImputer()
         self.X = imputer.fit_transform(self.X)

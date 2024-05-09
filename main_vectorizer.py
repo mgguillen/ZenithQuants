@@ -28,7 +28,7 @@ benchmark = bv.load_ben_data()
 nyse_calendar = mcal.get_calendar('NYSE')
 #'2024-04-10'
 # Obtenemos las sesiones de trading en el rango deseado
-trading_days = nyse_calendar.schedule(start_date='2020-01-02', end_date='2024-01-04')
+trading_days = nyse_calendar.schedule(start_date='2020-01-02', end_date='2021-01-04')
 trading_days.index = trading_days.index.tz_localize(None)
 trading_days_series = trading_days.index.to_series()
 if freq == "M":
@@ -54,27 +54,32 @@ for today in first_business_days:
     end_date_fred_str = dt.end_date_fred_str
     start_date = dt.start_date
     rend_spy = 0
-    #p_TB3MS = datos["TB3MS"].iloc[-1]
     # Una vez que tenemos los datos y como voy a calcular los procesos de seleccion de atributos, seleccion
     # de hiperparametros y prediccion de forma independiente para cada ETF, preparo la función que voy a usar
     # en el cálculo paralelizado
     def procesar_etf(etf):
         global p_TB3MS
+        ##global alpha
         # seleccionamos datos por ETF
-        data_etf = datos[datos["etf"] == etf]
+
+        data_etf = datos[datos["etf"] == etf].copy()
+        #'data_etf_' + etf = datos[datos["etf"] == etf].copy()
+        # f'data_etf_{etf}' = datos[datos["etf"] == etf].copy()
         # Añadimos atributos alpha_factors
-        alpha_factors = AlphaFactors(data_etf,end_date_fred_str,start_date)
-        alpha = alpha_factors.calculate_all()
+        ##alpha_factors = AlphaFactors(data_etf,end_date_fred_str,start_date)
+        alpha_factors = AlphaFactors(data_etf, end_date_fred_str, start_date)
+        alpha = alpha_factors.calculate_all().copy()
         # Guardamos el valor mas actual de TB3MS para el cálculo de Sortino en Optimización de la Cartera
         p_TB3MS = alpha["TB3MS"].iloc[-1]
         # Seleccionamos los mejores atributos
         c = FeatureSelector(alpha)
-        caracteristicas = c.calculate_feature_importance(method='causal', n_features=10)
+        caracteristicas = c.calculate_feature_importance(method='shap', n_features=10)
         atributos = caracteristicas[['top_features']].iloc[0][0]
-        data_model = alpha[["date"] + atributos + ["close"]].reset_index(drop=True)
+        data_model = alpha[["date"] + atributos + ["close"]].reset_index(drop=True).copy()
         # Calculamos los mejores hiperparametros y realizamos la prediccion
         b = ModelBuilder(data_model,model='XGBR')
         rend = b.predict_rend()
+        #print("ETF:,", etf,'Predict_rend: ', rend,'Close',data_model['close'].iloc[-2] )
         # Devolvemos un Dataframe con los diccionarios de ETF y predicción
         return pd.DataFrame({'date':[today],'ETF': [etf], 'Predict_rend': [rend]})
     # Inicializa una lista para guardar los DataFrames
@@ -100,6 +105,7 @@ for today in first_business_days:
     predictions_ni['All'] = 0
     # Filtramos los ETFs cuyo 'Alfa' es mayor que cero y excluye 'SPY'
     etfs_filtered = predictions_ni[(predictions_ni['Alfa'] > 0) & (predictions_ni['ETF'] != 'SPY')]
+    #print(alpha.columns)
     # Continuamos si existen predicciones de mejor rendimiento, en caso contrario no hacemos nada
     if len(etfs_filtered) > 0:
         if len(etfs_filtered) > 3:
@@ -121,10 +127,12 @@ for today in first_business_days:
         predictions_ni['All'] = 1
     # Concatenamos las predicciones
     predictions = pd.concat([predictions, predictions_ni], ignore_index=True)
+
+    fin = time.time()
+    duracion = fin - inicio
+    print(f"El proceso tomó {duracion / 60} minutos, el record esta en 1.08 minutos. Empezamos con 13.66 minutos")
 predictions.to_csv('predictions.csv', index=False)
 bv.load_price_data(predictions)
 bv.backtest_strategy()
 # Marca de tiempo al final del proceso
-fin = time.time()
-duracion = fin - inicio
-print(f"El proceso tomó {duracion / 60} minutos, el record esta en 1.08 minutos. Empezamos con 13.66 minutos")
+
