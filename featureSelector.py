@@ -25,12 +25,13 @@ class FeatureSelector:
         #print(type(self.data))
         self.data = self.data.fillna(0)
         self.X = self.data.drop(['date', 'etf', 'close'], axis=1).shift(1)
+        #print(self.X.shape)
         self.X = self.X.iloc[1:]
         self.y = self.data['close']
         self.y = self.y.iloc[1:]
         self.etf = self.data['etf'].unique()
 
-    def calculate_feature_importance(self, method='causal', n_features=15):
+    def calculate_feature_importance(self, method='causal', n_features=10):
         """
         Calculamos la importancia de las características utilizando alguno de los métodos.
         :param method: Método para calcular la importancia ('shap', 'causal', 'selectkbest').
@@ -60,6 +61,7 @@ class FeatureSelector:
         features_shap = pd.DataFrame(list(zip(self.X.columns, shap_sum)),
                                      columns=['Feature', 'SHAP Importance'])
         top_features = features_shap.nlargest(n_features, 'SHAP Importance')
+        #print("shap: ", top_features)
         return pd.DataFrame({'method': 'shap', 'ETF': self.etf, 'top_features': [list(top_features['Feature'])]})
 
     def causal_method(self, n_features):

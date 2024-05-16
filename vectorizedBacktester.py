@@ -109,11 +109,16 @@ class VectorizedBacktester:
         """
         Grafica los resultados del backtesting en comparación con SPY.
         """
+        # Definición de la paleta de colores
+        colors = {
+            'portfolio': '#FF5733',  # Naranja Magna
+            'spy': '#9C27B0'         # Púrpura Magna
+        }
         plt.figure(figsize=(14, 7))
         # Rendimiento del portafolio
-        plt.plot(self.portfolio_value.index.get_level_values('date'), self.portfolio_value, label='Portafolio', marker='o', linestyle='-', color='orange')
+        plt.plot(self.portfolio_value.index.get_level_values('date'), self.portfolio_value, label='Portafolio', marker='o', linestyle='-', color=colors['portfolio'])
         # Rendimiento de SPY
-        plt.plot(self.spy_returns.index.get_level_values('date'), self.spy_returns, label='SPY', marker='x', linestyle='--', color='purple')
+        plt.plot(self.spy_returns.index.get_level_values('date'), self.spy_returns, label='SPY', marker='x', linestyle='--', color=colors['spy'])
         plt.title('Rendimiento del Portafolio vs. SPY')
         plt.xlabel('Fecha')
         plt.ylabel('Valor del Portafolio')

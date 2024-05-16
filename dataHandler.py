@@ -95,7 +95,7 @@ class DataHandler:
 
         data_ohlcv = pd.concat(lista_df, ignore_index=True)  # Combina todos los DataFrames en uno solo
         data_ohlcv = data_ohlcv[data_ohlcv["date"]<=self.end_date_fred_str]
-        print("data handler",data_ohlcv.tail())
+        #print("data handler",data_ohlcv.tail())
         return data_ohlcv
 
     def preprocess_data(self, data=None):
