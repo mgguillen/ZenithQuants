@@ -122,4 +122,4 @@ def print_process_duration(start_time):
 
 
 if __name__ == "__main__":
-    main_vectorizer(rend=0, freq='M')
+    main_vectorizer(rend=1, freq='W')
