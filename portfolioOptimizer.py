@@ -35,14 +35,7 @@ class PortfolioOptimizer:
         kurt = kurtosis(portfolio_return_sum, 0)
         negative_returns = portfolio_return[portfolio_return < 0]
         std_sortino = np.std(negative_returns) if not negative_returns.size == 0 else np.inf
-        if self.ind_beta:
-            criterion = self.Wbar ** (1 - self.Lambda) / (1 + self.Lambda) + self.Wbar ** (-self.Lambda) \
-                    * self.W * mean - self.Lambda / 2 * self.Wbar ** (-1 - self.Lambda) * self.W ** 2 * std ** 2 \
-                    + self.Lambda * (self.Lambda + 1) / (6) * self.Wbar ** (-2 - self.Lambda) * self.W ** 3 * skewness \
-                    - self.Lambda * (self.Lambda + 1) * (self.Lambda + 2) / (24) * self.Wbar ** (-3 - self.Lambda) * \
-                    self.W ** 4 * kurt
-        else:
-            criterion = (mean - self.TB3MS_monthly) / (std_sortino + 1e-8)
+        criterion = (mean - self.TB3MS_monthly) / (std_sortino + 1e-8)
         criterion = -criterion  # Maximizar criterion
         return criterion
 

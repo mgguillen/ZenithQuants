@@ -1,0 +1,19 @@
+Análisis General
+
+Riesgo vs. Rendimiento:
+- Esta estrategia tiene un beta de 0.886, lo que indica que es menos volátil que el mercado. Esto es positivo indica una inversión con menos altibajos que el mercado general.
+- Sin embargo, el alpha negativo (-0.007) es preocupante, ya que sugiere que la estrategia no está generando un rendimiento adicional suficiente para compensar el riesgo que asumimos, en comparación con el benchmark. 
+Evaluación de Riesgo:
+- El ratio de Sharpe (0.724) y el Sortino (0.724) son moderados. Aunque no son negativos, están por debajo del umbral ideal de 1.0, 
+que indicaría una excelente compensación por cada unidad de riesgo adicional. 
+- El VaR de 10.1% y un drawdown máximo de 11.2% revelan que la estrategia puede enfrentar fluctuaciones significativas y pérdidas potenciales. 
+
+Conclusiónes
+
+La estrategia presenta una volatilidad menor que el mercado, lo cual es adecuado para una inversión menos turbulenta. 
+Sin embargo, la falta de un rendimiento superior ajustado al riesgo y los niveles moderados de Sharpe y Sortino sugieren que hay margen para mejorar 
+en términos de optimización de la relación riesgo-rendimiento. 
+Además, los riesgos de pérdidas pronunciadas, indicados por el VaR y el drawdown, deben ser considerados cuidadosamente.
+
+En resumen, se deberia de poder mejorar el rendimiento ajustado al riesgo y de minimizar las pérdidas potenciales, 
+según nuestra tolerancia al riesgo. 

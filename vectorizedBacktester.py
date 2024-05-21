@@ -57,7 +57,7 @@ class VectorizedBacktester:
                 etf = row['ETF']
                 shares = self.shares_owned.get(etf, 0)
                 if shares > 0:
-                    capital = shares * row['close']
+                    capital = shares * row["close"]
                     self.capital += capital
                     self.shares_owned[etf] = 0  # Todas las acciones de este etf vendidas
                     df_merged.at[index, 'shares_owned'] = 0
@@ -71,12 +71,12 @@ class VectorizedBacktester:
                 etf, investment_ratio = row['ETF'], row['Inversion']
                 amount_to_invest = investment * investment_ratio
                 self.capital -= amount_to_invest
-                shares_to_buy = int(amount_to_invest / row['close'])
+                shares_to_buy = int(amount_to_invest / row["close"])
                 self.shares_owned[etf] = self.shares_owned.get(etf, 0) + shares_to_buy
                 df_merged.at[index, 'shares_owned'] = self.shares_owned[etf]
         df_merged.sort_values(by=['date', 'ETF'], ascending=[True, True], inplace=True)
         # Calculamos el valor de la cartera al final de cada periodo
-        df_merged['valor_final'] = (df_merged['shares_owned'] * df_merged['close']) + df_merged['capital']
+        df_merged['valor_final'] = (df_merged['shares_owned'] * df_merged["close"]) + df_merged['capital']
         # Guardamos el resultado
         df_merged.to_csv('merged.csv', index=False)
         rendimiento_mensual = df_merged[['date', 'valor_final']].groupby('date').sum()
@@ -84,13 +84,17 @@ class VectorizedBacktester:
         rendimiento_mensual = rendimiento_mensual.fillna(method='ffill')
         rendimiento_mensual = rendimiento_mensual.fillna(method='bfill')
         portfolio_log_returns = np.log(rendimiento_mensual / rendimiento_mensual.shift(1))
+        portfolio_log_returns.to_csv('portfolio_value.csv', index=True)
         self.portfolio_value = portfolio_log_returns.cumsum().apply(np.exp)
+
         # Benchmark
         spy_data = df_merged[df_merged['ETF'] == 'SPY'].groupby('date').sum()
-        initial_spy_shares = int(self.initial_capital / spy_data['close'].iloc[0])
-        spy_value = initial_spy_shares * spy_data['close']
+        initial_spy_shares = int(self.initial_capital / spy_data["close"].iloc[0])
+        spy_value = initial_spy_shares * spy_data["close"]
         spy_log_returns = np.log(spy_value / spy_value.shift(1))
+        spy_log_returns.to_csv('spy_returns.csv', index=True)
         self.spy_returns = spy_log_returns.cumsum().apply(np.exp)
+
         # Graficamos el resultado
         self.plot_results()
 

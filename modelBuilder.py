@@ -13,7 +13,7 @@ from sklearn.model_selection import TimeSeriesSplit,GridSearchCV,RandomizedSearc
 
 
 class ModelBuilder:
-    def __init__(self, data, model='LGBMR', split=False, etf = 'SPY', rand = 1,eval_hyper = False):
+    def __init__(self, data, model='LGBMR', split=False, etf='SPY', rand=5,eval_hyper=True, write=False):
         """
         Inicializamos la clase de modelos con los datos .
         :param data: DataFrame con los datos para  entrenar modelos.
@@ -28,6 +28,7 @@ class ModelBuilder:
         self.rand = rand
         self.etf = etf
         self.eval_hyper = eval_hyper
+        self.write = write
 
     def prepare_data(self):
         """
@@ -35,10 +36,8 @@ class ModelBuilder:
         y si split es True, en train y test.
         """
         self.y = self.data["close"]
-        #print(self.y, self.y.iloc[-1])
         self.X = self.data.drop(["close"], axis=1)
         self.X['date'] = pd.to_datetime(self.X['date'])
-        #print("model builder", self.X.tail())
         # Buscamos la fecha maxima de los datos
         self.fecha_fin = self.X['date'].max()
         # Calculamos la fecha de inicio para el conjunto de prueba (un año antes de la fecha_fin)
@@ -47,7 +46,6 @@ class ModelBuilder:
         indice_split = self.X.index[self.X['date'] >= fecha_inicio_prueba].min()
         # Seleccionamos el último registro, que nos servira para la predicción
         self.row_month = self.X.iloc[-1:].drop(['date'], axis=1)
-        #print("model builder ultimo", self.row_month)
         # Retrasamos todas las caracteristicas, un periodo, asi ponemos la variable objetivo a la misma altura temporal
         # de las caracteristicas dependientes que nos serviran para predecir.
         self.X = self.X.drop(['date'], axis=1).shift(1)
@@ -62,16 +60,13 @@ class ModelBuilder:
             if self.y_test.isnull().any() or np.isinf(self.y_test).any():
                 self.y_test.fillna(self.y_test.mean(), inplace=True)
 
-
         else:
             self.X_train = self.X
             self.y_train = self.y
         # Eliminamos valores nulos con la media
         if self.X_train.isnull().any().any() or np.isinf(self.X_train).any().any():
             numeric_cols = self.X_train.select_dtypes(exclude=[np.number])
-            #print(numeric_cols)
             self.X_train.fillna(self.X_train.mean(), inplace=True)
-
         if self.y_train.isnull().any() or np.isinf(self.y_train).any():
             self.y_train.fillna(self.y_train.mean(), inplace=True)
 
@@ -98,26 +93,26 @@ class ModelBuilder:
         modelo = XGBRegressor(verbosity=0, random_state=42)
         if self.eval_hyper:
             param_grid = {
-                'n_estimators':[25, 500],#[25, 100, 300, 500],
-                'learning_rate':[0.01, 0.05],# [0.01, 0.05, 0.1],
-                'max_depth': [7,3],#[3, 5, 7, 10, 15],
-                'subsample': [0.6, 0.8],#[0.6, 0.8, 0.9],
-                'colsample_bytree':[0.5, 0.7],#[0.5, 0.7, 0.8],
-                'gamma': [0, 0.5], #[0, 0.1, 0.2, 0.5],
-                'reg_alpha': [0, 0.1],#[ 1],
-                'reg_lambda': [1, 1.5]#[1, 1.5, 2]
+                'n_estimators':[25, 500],
+                'learning_rate':[0.01, 0.05],
+                'max_depth': [7,3],
+                'subsample': [0.6, 0.8],
+                'colsample_bytree':[0.5, 0.7],
+                'gamma': [0, 0.5],
+                'reg_alpha': [0, 0.1],
+                'reg_lambda': [1, 1.5]
             }
 
         else:
             param_grid = {
-                'n_estimators':[25],#[25, 500],#[25, 100, 300, 500],
-                'learning_rate':[0.05],#[0.01, 0.05],# [0.01, 0.05, 0.1],
-                'max_depth': [7],#[7,3],#[3, 5, 7, 10, 15],
-                'subsample': [0.6],#[0.6, 0.8],#[0.6, 0.8, 0.9],
-                'colsample_bytree':[0.5],#[0.5, 0.7],#[0.5, 0.7, 0.8],
-                'gamma': [0.5],#[0, 0.5], #[0, 0.1, 0.2, 0.5],
-                'reg_alpha': [0],#[0, 0.1],#[ 1],
-                'reg_lambda': [1],#[1, 1.5]#[1, 1.5, 2]
+                'n_estimators':[25],
+                'learning_rate':[0.05],
+                'max_depth': [7],
+                'subsample': [0.6],
+                'colsample_bytree':[0.5],
+                'gamma': [0.5],
+                'reg_alpha': [0],
+                'reg_lambda': [1],
             }
         # Usamos TimeSeriesSplit para la validación cruzada en series temporales
         tscv = TimeSeriesSplit(n_splits=5)
@@ -127,7 +122,6 @@ class ModelBuilder:
                                            verbose=0)
             random_search.fit(self.X_train, self.y_train)
             parametros = random_search.best_params_
-            #print("Mejores parámetros:", parametros)
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
@@ -146,10 +140,8 @@ class ModelBuilder:
                                        n_jobs=1,
                                        error_score='raise')
             grid_search.fit(self.X_train, self.y_train)
-            #print("Mejores parámetros:", grid_search.best_params_)
             self.best_model = grid_search.best_estimator_
             parametros = grid_search.best_params_
-            #print("Mejores parámetros:", parametros)
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
@@ -163,21 +155,20 @@ class ModelBuilder:
             best_model = XGBRegressor(**best_params, random_state=42, verbosity=0)
             best_model.fit(self.X_train, self.y_train)
             self.best_model = best_model
-            #print("Mejores parámetros optuna:", best_params)
             parametros = best_params
-            # print("Mejores parámetros:", parametros)
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
             parametros['date'] = self.fecha_fin
             df = pd.DataFrame([parametros])
 
-        if self.eval_hyper:
+        if self.eval_hyper and self.write:
             # Escribimos el CSV, añadiendo si el archivo ya existe
             with open('hiperparametros_seleccionados.csv', 'a', newline='') as f:
                 df.to_csv(f, header=f.tell() == 0, index=False)
 
         return self.best_model
+
     def objective(self, trial):
         param = {
             'n_estimators': trial.suggest_int('n_estimators', 50, 100),
@@ -190,7 +181,6 @@ class ModelBuilder:
             'reg_lambda': trial.suggest_float('reg_lambda', 1, 2)
         }
 
-        #model = LGBMRegressor(**param, random_state=42, verbosity=-1)
         model = XGBRegressor(**param, random_state=42, verbosity=0)
 
         tscv = TimeSeriesSplit(n_splits=10)
@@ -213,14 +203,14 @@ class ModelBuilder:
             }
         else:
             param_grid = {
-                'n_estimators':[25],#[25, 500],#[25, 100, 300, 500],
-                'learning_rate':[0.05],#[0.01, 0.05],# [0.01, 0.05, 0.1],
-                'max_depth': [7],#[7,3],#[3, 5, 7, 10, 15],
-                'subsample': [0.6],#[0.6, 0.8],#[0.6, 0.8, 0.9],
-                'colsample_bytree':[0.5],#[0.5, 0.7],#[0.5, 0.7, 0.8],
-                'gamma': [0.5],#[0, 0.5], #[0, 0.1, 0.2, 0.5],
-                'reg_alpha': [0],#[0, 0.1],#[ 1],
-                'reg_lambda': [1],#[1, 1.5]#[1, 1.5, 2]
+                'n_estimators':[25],
+                'learning_rate':[0.05],
+                'max_depth': [7],
+                'subsample': [0.6],
+                'colsample_bytree':[0.5],
+                'gamma': [0.5],
+                'reg_alpha': [0],
+                'reg_lambda': [1],
             }
 
         tscv = TimeSeriesSplit(n_splits=5)
@@ -232,7 +222,6 @@ class ModelBuilder:
             random_search.fit(self.X_train, self.y_train)
             self.best_model = random_search.best_estimator_
             parametros = random_search.best_params_
-            #print("Mejores parámetros:", parametros)
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
@@ -244,7 +233,6 @@ class ModelBuilder:
             grid_search.fit(self.X_train, self.y_train)
             self.best_model = grid_search.best_estimator_
             parametros = grid_search.best_params_
-            #print("Mejores parámetros:", parametros)
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
@@ -275,7 +263,6 @@ class ModelBuilder:
             best_model.fit(self.X_train, self.y_train)
             self.best_model = best_model
             parametros = best_params
-            #print("Mejores parámetros:", parametros)
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
@@ -311,7 +298,6 @@ class ModelBuilder:
         tscv = TimeSeriesSplit(n_splits=5)
 
         if self.rand == 0:
-            #print(self.model,self.etf )
             scorer = make_scorer(mean_squared_error, greater_is_better=False)
             random_search = RandomizedSearchCV(modelo, param_grid, n_iter=20, scoring=scorer, cv=tscv, random_state=42,
                                                verbose=0)
@@ -342,7 +328,7 @@ class ModelBuilder:
                     'max_depth': trial.suggest_int('max_depth', 10, 30),
                     'min_samples_split': trial.suggest_int('min_samples_split', 2, 6),
                     'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 3),
-                    'max_features': trial.suggest_categorical('max_features', ['auto', 'sqrt', 'log2'])
+                    'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2'])
                 }
                 model = RandomForestRegressor(**param, random_state=42)
                 scores = -cross_val_score(model, self.X_train, self.y_train, cv=tscv, scoring='neg_mean_squared_error')
@@ -366,8 +352,6 @@ class ModelBuilder:
             with open('hiperparametros_seleccionados.csv', 'a', newline='') as f:
                 df.to_csv(f, header=f.tell() == 0, index=False)
 
-
-
         return self.best_model
 
     def evaluate_model(self):
@@ -377,9 +361,6 @@ class ModelBuilder:
         """
         predictions = self.best_model.predict(self.X_test)
         vrmse = np.sqrt(mean_squared_error(self.y_test, predictions))
-        #print("evaluacion del modelo:")
-        #print(self.y_test, predictions)
-        #print( self.etf, vrmse)
         return vrmse
 
     def predict_rend(self):
@@ -390,8 +371,6 @@ class ModelBuilder:
          self.prepare_data()
          self.build_and_tune()
          prediction = self.best_model.predict(self.row_month)
-         #print("Modelo:")
-         #print(self.y_train.iloc[-1], prediction)
 
          return prediction[0]
 

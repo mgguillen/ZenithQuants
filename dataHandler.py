@@ -36,6 +36,7 @@ class DataHandler:
         self.etfs = etfs if etfs else self.DEFAULT_ETFs
         self.metrics = metrics if metrics else self.DEFAULT_METRICS
         self.start_date = start_date
+        #print("star_date",self.start_date)
         self.adjusted_start_date = (pd.to_datetime(self.start_date) - DateOffset(months=28)).strftime('%Y-%m-%d')
         self.end_date = end_date if end_date else datetime.now().strftime('%Y-%m-%d')
         self.freq = freq
@@ -94,7 +95,7 @@ class DataHandler:
             lista_df.append(data)
 
         data_ohlcv = pd.concat(lista_df, ignore_index=True)  # Combina todos los DataFrames en uno solo
-        data_ohlcv = data_ohlcv[data_ohlcv["date"]<=self.end_date_fred_str]
+        data_ohlcv = data_ohlcv[(data_ohlcv["date"]<=self.end_date_fred_str) & (data_ohlcv["date"]>=self.start_date)]
         #print("data handler",data_ohlcv.tail())
         return data_ohlcv
 

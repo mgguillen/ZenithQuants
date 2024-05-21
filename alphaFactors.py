@@ -21,7 +21,7 @@ class AlphaFactors:
     SAVE_PATH = 'C:/Users/ManuelGarcia/Ciencia de Datos y AI/TFM/script/Quants/daily'
     SAVE_PATH_SERIES = 'C:/Users/ManuelGarcia/Ciencia de Datos y AI/TFM/script/Quants/series'
 
-    def __init__(self, data, end_date_fred_str = '2020-01-02', start_date = None):
+    def __init__(self, data, end_date_fred_str='2020-01-02', start_date=None, rend=1, benchmark=None):
         """
         Inicializamos AlphaFactors.
         :param data: DataFrame con los datos de precios.
@@ -30,8 +30,19 @@ class AlphaFactors:
         """
 
         self.data = data
+        self.rend = rend
+        self.benchmark = benchmark
         self.data['close_or'] = self.data['close']
         self.data['close'] = np.log(self.data['close'] / self.data['close'].shift(1))
+        if self.rend == 1 and benchmark is not None:
+            # Resetear índices
+            spy_df_reset = benchmark.reset_index(drop=True).fillna(method='bfill').fillna(method='ffill')
+            etf_df_reset = self.data['close'].reset_index(drop=True).fillna(method='bfill').fillna(method='ffill')
+            if len(etf_df_reset) == len(spy_df_reset):
+                difference = np.subtract(etf_df_reset.to_numpy(), spy_df_reset.to_numpy())
+                self.data['close'] = pd.Series(difference, index=self.data['close'].index)
+            else:
+                print("Error: Las series de datos no están alineadas en longitud.")
         self.API_KEY_FRED = 'd6d360dc757c1441a1a73cf568e60e1c'
         self.end_date_fred_str = end_date_fred_str
         self.start_date = start_date
@@ -42,16 +53,12 @@ class AlphaFactors:
         self.data_dir_price = Path(self.SAVE)
         self.data_dir_price.mkdir(exist_ok=True)  # Crea el directorio si no existe
 
-        #print(self.data.columns)
-
     def add_time(self):
         """
         Añadimos columnas de mes y semana del año.
         """
-
         self.data['date'] = pd.to_datetime(self.data['date'])
         self.data['month'] = self.data['date'].dt.month  # Extrae el mes de la fecha
-        #print(self.data['date'])
         self.data['week_of_year'] = self.data['date'].dt.isocalendar().week.astype(int)
 
     def add_historical_volatility(self, windows=[3, 6, 12, 24, 48]):
@@ -78,13 +85,11 @@ class AlphaFactors:
         :param windows: Lista de ventanas de tiempo para calcular los indicadores.
         """
         for window in windows:
-            self.data[f'RSI_{window}m'] = self.data.ta.rsi(close='close', length = window)
-            self.data[f'MACD_{window}m'] = self.data.ta.macd(close='close', length = window)['MACD_12_26_9']
-            self.data[f'PPO_{window}m'] = self.data.ta.ppo(close='close', length = window)['PPO_12_26_9']
-            self.data[f'ROC_{window}m'] = self.data.ta.roc(close='close', length = window)
-            #adx_result = self.data.ta.adx(high='high', low='low', close='close', length=window)
-            #print(adx_result)
-            self.data[f'ADX_{window}m'] = self.data.ta.adx(high='high', low='low', close='close', length = window)[f'ADX_{window}']
+            self.data[f'RSI_{window}m'] = self.data.ta.rsi(close='close', length=window)
+            self.data[f'MACD_{window}m'] = self.data.ta.macd(close='close', length=window)['MACD_12_26_9']
+            self.data[f'PPO_{window}m'] = self.data.ta.ppo(close='close', length=window)['PPO_12_26_9']
+            self.data[f'ROC_{window}m'] = self.data.ta.roc(close='close', length=window)
+            self.data[f'ADX_{window}m'] = self.data.ta.adx(high='high', low='low', close='close', length=window)[f'ADX_{window}']
 
         for i in range(len(windows) - 1):
             short_window = windows[i]
@@ -141,9 +146,6 @@ class AlphaFactors:
             f"&observation_end={self.end_date_fred_str}"
         )
 
-        # print("serie: ", serie)
-        # print("self.start_date: ", self.start_date)
-        # print("self.end_date_fred_str: ", self.end_date_fred_str)
         response = requests.get(url).json()
         try:
             df_fred = pd.DataFrame(response['observations'])
@@ -154,7 +156,6 @@ class AlphaFactors:
         except KeyError:
             print(url)
             print(f"No se encontraron datos para la serie {serie}.")
-            # Opción 1: Devolver un DataFrame vacío
             return pd.DataFrame()
 
     def add_fetch_fred(self):
@@ -174,16 +175,15 @@ class AlphaFactors:
             if not data_serie.empty:
                 max_date = data_serie['date'].max()
                 new_start_date = max_date + pd.DateOffset(days=1)
-                # print("calculo new_start_date: ", new_start_date)
             else:
-                new_start_date = pd.to_datetime('2010-01-01')  # Asumir una fecha de inicio si no hay datos
+                new_start_date = pd.to_datetime('2010-01-01')
 
             # Solicita solo los datos nuevos si la última fecha es antes de la fecha final requerida
             if new_start_date <= pd.to_datetime(self.end_date_fred_str):
                 new_data = self.fetch_fred_data(serie, start_date=new_start_date)
                 if not new_data.empty:
                     data_serie = pd.concat([data_serie, new_data])
-                    data_serie.to_csv(file_path, index=False)  # Guardar la data actualizada
+                    data_serie.to_csv(file_path, index=False)
 
             if not data_serie.empty:
                 self.data = pd.merge_asof(self.data.sort_values('date'), data_serie.sort_values('date'), on='date',
@@ -228,6 +228,5 @@ class AlphaFactors:
         self.add_on_balance_volume()
         self.add_accumulation_distribution()
         self.add_commodity_channel_index()
-        #print("Alpha factor", self.data.tail())
         return self.data
 

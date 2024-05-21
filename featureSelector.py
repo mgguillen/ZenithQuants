@@ -24,7 +24,7 @@ class FeatureSelector:
         self.data = data.fillna(method='ffill').fillna(method='bfill')
         #print(type(self.data))
         self.data = self.data.fillna(0)
-        self.X = self.data.drop(['date', 'etf', 'close'], axis=1).shift(1)
+        self.X = self.data.drop(['date', 'etf', 'close','close_or'], axis=1).shift(1)
         #print(self.X.shape)
         self.X = self.X.iloc[1:]
         self.y = self.data['close']
