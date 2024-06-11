@@ -61,6 +61,9 @@ class FeatureSelector:
         features_shap = pd.DataFrame(list(zip(self.X.columns, shap_sum)),
                                      columns=['Feature', 'SHAP Importance'])
         top_features = features_shap.nlargest(n_features, 'SHAP Importance')
+        
+        top_features_list = top_features['Feature'].tolist()
+
         #print("shap: ", top_features)
         return pd.DataFrame({'method': 'shap', 'ETF': self.etf, 'top_features': [list(top_features['Feature'])]})
 
@@ -85,6 +88,10 @@ class FeatureSelector:
                                      columns=['Feature', 'SHAP Importance'])
         features_shap = features_shap[features_shap['Feature'] != 'treatment']
         top_features = features_shap.nlargest(n_features, 'SHAP Importance')
+        # Filtrar los valores SHAP para mostrar solo las características más importantes
+        # Filtrar los valores SHAP para mostrar solo las características más importantes
+
+
         return pd.DataFrame({'method': 'causal', 'ETF': self.etf, 'top_features': [list(top_features['Feature'])]})
 
     def select_k_best(self, n_features):

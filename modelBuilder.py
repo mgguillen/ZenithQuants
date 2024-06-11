@@ -13,7 +13,7 @@ from sklearn.model_selection import TimeSeriesSplit,GridSearchCV,RandomizedSearc
 
 
 class ModelBuilder:
-    def __init__(self, data, model='LGBMR', split=False, etf='SPY', rand=5,eval_hyper=True, write=False):
+    def __init__(self, today, data, model='LGBMR', split=False, etf='SPY', rand='optuna',eval_hyper=True, write=False):
         """
         Inicializamos la clase de modelos con los datos .
         :param data: DataFrame con los datos para  entrenar modelos.
@@ -29,6 +29,7 @@ class ModelBuilder:
         self.etf = etf
         self.eval_hyper = eval_hyper
         self.write = write
+        self.today = today
 
     def prepare_data(self):
         """
@@ -43,6 +44,9 @@ class ModelBuilder:
         # Calculamos la fecha de inicio para el conjunto de prueba (un año antes de la fecha_fin)
         fecha_inicio_prueba = self.fecha_fin - pd.DateOffset(years=1)
         # Buscamos que los datos sean mayores que esta fecha de inicio
+        #indice_inicio = self.X.index[self.X['date'] >= fecha_inicio_prueba].min()
+        #self.fecha_inicio = self.X['date'].iloc[indice_inicio]
+        #print("fecha_inicio: ",self.fecha_inicio)
         indice_split = self.X.index[self.X['date'] >= fecha_inicio_prueba].min()
         # Seleccionamos el último registro, que nos servira para la predicción
         self.row_month = self.X.iloc[-1:].drop(['date'], axis=1)
@@ -93,14 +97,14 @@ class ModelBuilder:
         modelo = XGBRegressor(verbosity=0, random_state=42)
         if self.eval_hyper:
             param_grid = {
-                'n_estimators':[25, 500],
-                'learning_rate':[0.01, 0.05],
-                'max_depth': [7,3],
-                'subsample': [0.6, 0.8],
-                'colsample_bytree':[0.5, 0.7],
+                'n_estimators': [25, 500],
+                'learning_rate': [0.01, 0.1],
+                'max_depth': [5, 15],
+                'subsample': [0.6, 0.9],
+                'colsample_bytree': [0.6, 0.8],
                 'gamma': [0, 0.5],
                 'reg_alpha': [0, 0.1],
-                'reg_lambda': [1, 1.5]
+                'reg_lambda': [1, 2]
             }
 
         else:
@@ -116,7 +120,7 @@ class ModelBuilder:
             }
         # Usamos TimeSeriesSplit para la validación cruzada en series temporales
         tscv = TimeSeriesSplit(n_splits=5)
-        if self.rand == 0:
+        if self.rand == 'random':
             scorer = make_scorer(mean_squared_error, greater_is_better=False)
             random_search = RandomizedSearchCV(modelo, param_grid, n_iter=20, scoring=scorer, cv=tscv, random_state=42,
                                            verbose=0)
@@ -125,13 +129,13 @@ class ModelBuilder:
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
-            parametros['date'] = self.fecha_fin
+            parametros['date'] = self.today
             df = pd.DataFrame([parametros])
             # Escribir al CSV, añadiendo si el archivo ya existe
 
             self.best_model = random_search.best_estimator_
 
-        elif self.rand == 1:
+        elif self.rand =='grid':
             grid_search = GridSearchCV(estimator=modelo,
                                        param_grid=param_grid,
                                        cv=tscv,
@@ -145,12 +149,12 @@ class ModelBuilder:
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
-            parametros['date'] = self.fecha_fin
+            parametros['date'] = self.today
             df = pd.DataFrame([parametros])
 
-        else:
+        elif  self.rand == 'optuna':
             study = optuna.create_study(direction='minimize')
-            study.optimize(self.objective, n_trials=20)
+            study.optimize(self.objective, n_trials=30)
             best_params = study.best_params
             best_model = XGBRegressor(**best_params, random_state=42, verbosity=0)
             best_model.fit(self.X_train, self.y_train)
@@ -159,21 +163,21 @@ class ModelBuilder:
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
-            parametros['date'] = self.fecha_fin
+            parametros['date'] = self.today
             df = pd.DataFrame([parametros])
 
         if self.eval_hyper and self.write:
             # Escribimos el CSV, añadiendo si el archivo ya existe
-            with open('hiperparametros_seleccionados.csv', 'a', newline='') as f:
+            with open(f'hiperparametros_seleccionados{self.model}.csv', 'a', newline='') as f:
                 df.to_csv(f, header=f.tell() == 0, index=False)
 
         return self.best_model
 
     def objective(self, trial):
         param = {
-            'n_estimators': trial.suggest_int('n_estimators', 50, 100),
+            'n_estimators': trial.suggest_int('n_estimators', 25, 500),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.1),
             'max_depth': trial.suggest_int('max_depth', 5, 15),
-            'learning_rate': trial.suggest_float('learning_rate', 0.05, 0.1),
             'subsample': trial.suggest_float('subsample', 0.6, 0.9),
             'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 0.8),
             'gamma': trial.suggest_float('gamma', 0, 0.5),
@@ -183,7 +187,7 @@ class ModelBuilder:
 
         model = XGBRegressor(**param, random_state=42, verbosity=0)
 
-        tscv = TimeSeriesSplit(n_splits=10)
+        tscv = TimeSeriesSplit(n_splits=5)
         scores = -cross_val_score(model, self.X_train, self.y_train, cv=tscv, scoring='neg_mean_squared_error')
         rmse = np.mean(np.sqrt(scores))
         return rmse
@@ -194,13 +198,14 @@ class ModelBuilder:
             param_grid = {
                 'n_estimators': [100, 200, 300],
                 'learning_rate': [0.01, 0.05, 0.1],
-                'num_leaves': [31, 40, 50],
+                'max_depth': [10, 15, 20],
                 'feature_fraction': [0.6, 0.8],
                 'bagging_fraction': [0.6, 0.8],
-                'max_depth': [10, 15, 20],
                 'reg_alpha': [0.1, 0.5],
-                'reg_lambda': [1, 1.5]
+                'reg_lambda': [1, 1.5],
+                'num_leaves': [31, 40, 50],
             }
+
         else:
             param_grid = {
                 'n_estimators':[25],
@@ -215,7 +220,7 @@ class ModelBuilder:
 
         tscv = TimeSeriesSplit(n_splits=5)
 
-        if self.rand == 0:
+        if self.rand == 'random':
             scorer = make_scorer(mean_squared_error, greater_is_better=False)
             random_search = RandomizedSearchCV(modelo, param_grid, n_iter=20, scoring=scorer, cv=tscv, random_state=42,
                                                verbose=0)
@@ -225,10 +230,10 @@ class ModelBuilder:
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
-            parametros['date'] = self.fecha_fin
+            parametros['date'] = self.today
             df = pd.DataFrame([parametros])
 
-        elif self.rand == 1:
+        elif self.rand == 'grid':
             grid_search = GridSearchCV(modelo, param_grid, scoring='neg_mean_squared_error', cv=tscv, verbose=0)
             grid_search.fit(self.X_train, self.y_train)
             self.best_model = grid_search.best_estimator_
@@ -236,10 +241,10 @@ class ModelBuilder:
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
-            parametros['date'] = self.fecha_fin
+            parametros['date'] = self.today
             df = pd.DataFrame([parametros])
 
-        else:
+        elif self.rand == 'optuna':
             def objective(trial):
                 param = {
                     'n_estimators': trial.suggest_int('n_estimators', 100, 300),
@@ -257,7 +262,7 @@ class ModelBuilder:
                 return rmse
 
             study = optuna.create_study(direction='minimize')
-            study.optimize(objective, n_trials=20)
+            study.optimize(objective, n_trials=30)
             best_params = study.best_params
             best_model = LGBMRegressor(**best_params, random_state=42, verbosity=-1)
             best_model.fit(self.X_train, self.y_train)
@@ -266,12 +271,12 @@ class ModelBuilder:
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
-            parametros['date'] = self.fecha_fin
+            parametros['date'] = self.today
             df = pd.DataFrame([parametros])
 
-        if self.eval_hyper:
+        if self.eval_hyper and self.write:
             # Escribimos el CSV, añadiendo si el archivo ya existe
-            with open('hiperparametros_seleccionados.csv', 'a', newline='') as f:
+            with open(f'hiperparametros_seleccionados{self.model}.csv', 'a', newline='') as f:
                 df.to_csv(f, header=f.tell() == 0, index=False)
 
         return self.best_model
@@ -297,7 +302,7 @@ class ModelBuilder:
 
         tscv = TimeSeriesSplit(n_splits=5)
 
-        if self.rand == 0:
+        if self.rand == 'random':
             scorer = make_scorer(mean_squared_error, greater_is_better=False)
             random_search = RandomizedSearchCV(modelo, param_grid, n_iter=20, scoring=scorer, cv=tscv, random_state=42,
                                                verbose=0)
@@ -307,10 +312,10 @@ class ModelBuilder:
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
-            parametros['date'] = self.fecha_fin
+            parametros['date'] = self.today
             df = pd.DataFrame([parametros])
 
-        elif self.rand == 1:
+        elif self.rand == 'grid':
             grid_search = GridSearchCV(modelo, param_grid, scoring='neg_mean_squared_error', cv=tscv, verbose=0)
             grid_search.fit(self.X_train, self.y_train)
             self.best_model = grid_search.best_estimator_
@@ -318,10 +323,10 @@ class ModelBuilder:
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
-            parametros['date'] = self.fecha_fin
+            parametros['date'] = self.today
             df = pd.DataFrame([parametros])
 
-        else:
+        elif self.rand == 'optuna':
             def objective(trial):
                 param = {
                     'n_estimators': trial.suggest_int('n_estimators', 50, 200),
@@ -345,11 +350,11 @@ class ModelBuilder:
             parametros['Modelo'] = self.model
             parametros['Metodo'] = self.rand
             parametros['ETF'] = self.etf
-            parametros['date'] = self.fecha_fin
+            parametros['date'] = self.today
             df = pd.DataFrame([parametros])
-        if self.eval_hyper:
+        if self.eval_hyper and self.write:
             # Escribimos el CSV, añadiendo si el archivo ya existe
-            with open('hiperparametros_seleccionados.csv', 'a', newline='') as f:
+            with open(f'hiperparametros_seleccionados{self.model}.csv', 'a', newline='') as f:
                 df.to_csv(f, header=f.tell() == 0, index=False)
 
         return self.best_model
@@ -361,7 +366,7 @@ class ModelBuilder:
         """
         predictions = self.best_model.predict(self.X_test)
         vrmse = np.sqrt(mean_squared_error(self.y_test, predictions))
-        return vrmse
+        return vrmse, predictions
 
     def predict_rend(self):
          """

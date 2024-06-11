@@ -9,7 +9,7 @@ np.random.seed(55)
 
 
 class PortfolioOptimizer:
-    def __init__(self, data=None, p_etfs=None, p_TB3MS = 0, p_lambda=3, p_W=1, p_Wbar=0.0125, p_beta=False):
+    def __init__(self, vfreq = 'M',data=None, p_etfs=None, p_TB3MS = 0, p_lambda=3, p_W=1, p_Wbar=0.0125, p_beta=False):
         self.TB3MS = p_TB3MS
         self.p_etfs = p_etfs
         if data is None:
@@ -25,6 +25,9 @@ class PortfolioOptimizer:
         self.Wbar = p_Wbar
         self.ind_beta = p_beta
         self.TB3MS_monthly = (1 + self.TB3MS) ** (1 / 12) - 1
+        if vfreq == 'W':
+            self.TB3MS_monthly = (1 + self.TB3MS) ** (1 / 52) - 1
+
 
     def criterion(self, weight, data):
         portfolio_return = np.multiply(data, np.transpose(weight))

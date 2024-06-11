@@ -15,7 +15,7 @@ from dataAnalyzer import DataAnalyzer
 plt.style.use("seaborn-v0_8")
 
 
-def main_vectorizer(rend=1, freq='M', start_back='2023-01-02', end_back='2024-01-04'):
+def main_vectorizer(rend=1, freq='M', start_back='2020-01-02', end_back='2024-01-04'):
     global vrend
     global vfreq
     vrend = rend
@@ -28,7 +28,7 @@ def main_vectorizer(rend=1, freq='M', start_back='2023-01-02', end_back='2024-01
     for today in trading_days:
         print('Today: ', today)
         predictions_ni = process_day(today, DEFAULT_ETFs)
-        dt = DataHandler(start_date='2010-01-01', start_back=today.strftime('%Y-%m-%d'), freq='M')
+        dt = DataHandler(start_date='2016-01-01', start_back=today.strftime('%Y-%m-%d'), freq=vfreq)
         if vrend == 0:
             rend_spy = predictions_ni.loc[predictions_ni['ETF'] == 'SPY', 'Predict_rend'].iloc[0]
             # Calcula Alfa para cada ETF
@@ -56,7 +56,7 @@ def main_vectorizer(rend=1, freq='M', start_back='2023-01-02', end_back='2024-01
             datos_portfolio = dt.load_data_portfolio(etfs=etfs_portfolio)
             # Inicializamos la clase para la optimizacion de la cartera y obtenemos los % de inversion
             p_TB3MS = predictions_ni["TB3MS"].iloc[-1]
-            optimizer = PortfolioOptimizer(data=datos_portfolio, p_etfs=etfs_portfolio, p_beta=False, p_TB3MS=p_TB3MS)
+            optimizer = PortfolioOptimizer(vfreq=vfreq, data=datos_portfolio, p_etfs=etfs_portfolio, p_beta=False, p_TB3MS=p_TB3MS)
             porcentajes_inversion = optimizer.portfolio_optimize()
             # Añadimos los porcentajes de inversión para cada etf
             predictions_ni['Inversion'] = predictions_ni['ETF'].apply(lambda etf: porcentajes_inversion.get(etf, 0))
@@ -69,7 +69,7 @@ def main_vectorizer(rend=1, freq='M', start_back='2023-01-02', end_back='2024-01
     predictions.to_csv('predictions.csv', index=False)
     bv.load_price_data(predictions)
     bv.backtest_strategy()
-    analyzer = DataAnalyzer()
+    analyzer = DataAnalyzer(vfreq)
     analyzer.analyze_portfolio()
     print_process_duration(start_time)
 
@@ -85,33 +85,33 @@ def get_trading_days(calendar_name, start_date, end_date, freq):
 
 
 def process_day(today, etfs):
-    dt = DataHandler(start_date='2010-01-01', start_back=today.strftime('%Y-%m-%d'), freq='M')
+    dt = DataHandler(start_date='2016-01-01', start_back=today.strftime('%Y-%m-%d'), freq=vfreq)
     datos = dt.load_data()
     spy = benchmark(datos, dt)
     # Creación de hilos para cálculo en paralelo
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(process_etf, etf, datos, dt, spy) for etf in etfs]
+        futures = [executor.submit(process_etf, etf, datos, dt, spy, today) for etf in etfs]
         predictions_dfs = [future.result() for future in concurrent.futures.as_completed(futures)]
     return pd.concat(predictions_dfs, ignore_index=True)
 
 
-def benchmark(datos, dt, benchmark = 'SPY'):
+def benchmark(datos, dt, benchmark='SPY'):
     data_etf = datos[datos["etf"] == benchmark].copy()
-    alpha_spy = AlphaFactors(data_etf, dt.end_date_fred_str, dt.start_date,rend=0)
+    alpha_spy = AlphaFactors(data_etf, dt.end_date_fred_str, dt.start_date, rend=vrend)
     alpha = alpha_spy.calculate_all().copy()
     return alpha['close']
 
 
-def process_etf(etf, datos, dt, spy):
+def process_etf(etf, datos, dt, spy, today):
     data_etf = datos[datos["etf"] == etf].copy()
     alpha_factors = AlphaFactors(data_etf, dt.end_date_fred_str, dt.start_date, rend=vrend, benchmark=spy)
     alpha = alpha_factors.calculate_all().copy()
     feature_selector = FeatureSelector(alpha)
-    caracteristicas = feature_selector.calculate_feature_importance(method='causal', n_features=10)
+    caracteristicas = feature_selector.calculate_feature_importance(method='shap', n_features=10)
     attributes = caracteristicas[['top_features']].iloc[0][0]
     data_model = alpha[["date"] + attributes + ["close"]].reset_index(drop=True).copy()
     p_TB3MS = alpha["TB3MS"].iloc[-1]
-    model_builder = ModelBuilder(data_model, model='XGBR', etf=etf)
+    model_builder = ModelBuilder(today, data_model, model='XGBR', etf=etf, rand='random')
     rend = model_builder.predict_rend()
     return pd.DataFrame({'date': [dt.start_back], 'ETF': [etf], 'Predict_rend': [rend], 'TB3MS': [p_TB3MS]})
 
@@ -122,4 +122,4 @@ def print_process_duration(start_time):
 
 
 if __name__ == "__main__":
-    main_vectorizer(rend=1, freq='W')
+    main_vectorizer(rend=1, freq='M')

@@ -18,7 +18,7 @@ from dataAnalyzer import DataAnalyzer
 plt.style.use("seaborn-v0_8")
 
 
-def main_evaluation(rend=1, freq='M', start_back='2020-01-02', end_back='2021-01-04' ):
+def main_evaluation(rend=1, freq='M', start_back='2020-06-01', end_back='2021-01-04' ):
     global vrend
     global vfreq
 
@@ -33,19 +33,21 @@ def main_evaluation(rend=1, freq='M', start_back='2020-01-02', end_back='2021-01
     hyperparameters_file_path = Path('hiperparametros_seleccionados.csv')
 
     evaluations = pd.DataFrame()
-
+    #print("today-: ", trading_days)
     for today in trading_days:
         print("today: ", today)
         evaluate = evaluate_day(today, DEFAULT_ETFs, features_file_path)
         evaluations = pd.concat([evaluations, evaluate], ignore_index=True)
 
     evaluations.to_csv('evaluations.csv', index=False)
+    #print(evaluations)
     print_evaluations(evaluations)
     plot_analysis()
 
 
-def get_trading_days(calendar_name, start_date, end_date, freq):
+def get_trading_days1(calendar_name, start_date, end_date, freq):
     nyse_calendar = mcal.get_calendar(calendar_name)
+    #print(start_date,end_date)
     trading_days = nyse_calendar.schedule(start_date=start_date, end_date=end_date)
     trading_days.index = trading_days.index.tz_localize(None)
     trading_days_series = trading_days.index.to_series()
@@ -54,6 +56,17 @@ def get_trading_days(calendar_name, start_date, end_date, freq):
     else:
         return trading_days_series.groupby([trading_days_series.dt.year, trading_days_series.dt.isocalendar().week]).first()
 
+def get_trading_days(calendar_name, start_date, end_date, freq):
+    nyse_calendar = mcal.get_calendar(calendar_name)
+    trading_days = nyse_calendar.schedule(start_date=start_date, end_date=end_date)
+    trading_days.index = trading_days.index.tz_localize(None)
+    trading_days_series = trading_days.index.to_series()
+
+    if freq == "M":
+        return trading_days_series.groupby([trading_days_series.dt.year, trading_days_series.dt.month]).first()
+    else:
+        # Modificación aquí para usar la semana del año según el calendario gregoriano
+        return trading_days_series.groupby([trading_days_series.dt.year, trading_days_series.dt.strftime('%U')]).first()
 
 def evaluate_day(today, etfs, features_file_path):
     predictions = pd.DataFrame()
@@ -105,8 +118,8 @@ def process_etf(etf, datos, dt, method, today, features_file_path):
         attributes = ['price_oscillator', 'MACD_3m', 'obv', 'skewness_6m', 'volume', 'skewness_3m'
             , 'bollinger_high_6', 'CPIAUCSL', 'MACD_48m', 'kurtosis_6m']
     data_model = alpha[["date"] + attributes + ["close"]].reset_index(drop=True).copy()
-    model_builder = ModelBuilder(data_model, model='LGBMR', split=True, etf=etf)
-    rmse = model_builder.run()
+    model_builder = ModelBuilder(data_model, model='XGBR', split=True, etf=etf)
+    rmse,_ = model_builder.run()
     # Guardamos las mejores caracteristicas
     with features_file_path.open(mode='a', newline='') as file:
         writer = csv.writer(file)
@@ -130,4 +143,4 @@ def plot_analysis():
 
 
 if __name__ == "__main__":
-    main_evaluation(rend=0, freq='M', start_back='2019-01-02', end_back='2020-01-04')
+    main_evaluation(rend=1, freq='M', start_back='2019-07-03', end_back='2019-08-04')
